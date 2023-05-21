@@ -1,5 +1,4 @@
 use std::{fs, thread, vec};
-use std::fs::File;
 
 use anyhow::{anyhow, Error}; //anyhow::Error::msg("My err");
 
@@ -50,11 +49,8 @@ fn decrypt_message_in_chunks(encrypted_message: &[u8], private_key: &RsaPrivateK
   let chunk_size = 256;
   let mut decrypted_data = Vec::new();
   let mut offset = 0;
-  let mut idx = 0;
 
   while offset < encrypted_message.len() {
-      idx += 1;
-      println!("Decrypting chunk {}", idx);
       let chunk = &encrypted_message[offset..offset + chunk_size.min(encrypted_message.len() - offset)];
       let decrypted_chunk = private_key
           .decrypt(Pkcs1v15Encrypt, chunk)
@@ -666,6 +662,7 @@ pub fn read(path: &str, threads: usize) -> anyhow::Result<Vec<u8>> {
 
     println!("Video read successfully");
 
+    println!("Start decrypting data with private_key.pem");
 
     let private_key_pem = fs::read_to_string("private_key.pem").expect("failed to read private key file");
     let private_key = RsaPrivateKey::from_pkcs1_pem(&private_key_pem).expect("failed to parse private key");
