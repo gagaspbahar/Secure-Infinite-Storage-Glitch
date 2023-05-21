@@ -1,4 +1,5 @@
 use std::{fs, thread, vec};
+use std::fs::File;
 
 use anyhow::{anyhow, Error}; //anyhow::Error::msg("My err");
 
@@ -6,12 +7,66 @@ use opencv::core::Mat;
 use opencv::prelude::*;
 use opencv::videoio::{VideoCapture, VideoWriter, CAP_ANY};
 
+use rsa::pkcs1::{EncodeRsaPrivateKey, DecodeRsaPrivateKey};
+use rsa::pkcs8::LineEnding;
+use rsa::{Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey};
+
 use crate::embedsource::EmbedSource;
 use crate::settings::{Data, OutputMode, Settings};
 use crate::timer::Timer;
 
 //Get and write bytes from and to files. Start and end of app
 //sounds cooler than og name (encode)
+
+const CHUNK_SIZE: usize = 245;
+
+fn encrypt_message_in_chunks(message: &[u8], public_key: &RsaPublicKey) -> Vec<u8> {
+  let mut encrypted_data = Vec::new();
+  let mut offset = 0;
+
+  while offset < message.len() {
+      if (offset + CHUNK_SIZE) > message.len() {
+          let chunk = &message[offset..];
+          let encrypted_chunk = public_key
+              .encrypt(&mut rand::thread_rng(), Pkcs1v15Encrypt, chunk)
+              .expect("failed to encrypt chunk");
+          encrypted_data.extend_from_slice(&encrypted_chunk);
+          break;
+      } else {
+        let chunk = &message[offset..offset + CHUNK_SIZE];
+        let encrypted_chunk = public_key
+            .encrypt(&mut rand::thread_rng(), Pkcs1v15Encrypt, chunk)
+            .expect("failed to encrypt chunk");
+        encrypted_data.extend_from_slice(&encrypted_chunk);
+        offset += CHUNK_SIZE;
+      }
+    }
+
+  encrypted_data
+}
+
+fn decrypt_message_in_chunks(encrypted_message: &[u8], private_key: &RsaPrivateKey) -> Vec<u8> {
+  
+  let chunk_size = 256;
+  let mut decrypted_data = Vec::new();
+  let mut offset = 0;
+  let mut idx = 0;
+
+  while offset < encrypted_message.len() {
+      idx += 1;
+      println!("Decrypting chunk {}", idx);
+      let chunk = &encrypted_message[offset..offset + chunk_size.min(encrypted_message.len() - offset)];
+      let decrypted_chunk = private_key
+          .decrypt(Pkcs1v15Encrypt, chunk)
+          .expect("failed to decrypt chunk");
+      decrypted_data.extend_from_slice(&decrypted_chunk);
+      offset += chunk_size;
+  }
+
+  decrypted_data
+}
+
+
 pub fn rip_bytes(path: &str) -> anyhow::Result<Vec<u8>> {
     let byte_data = fs::read(path)?;
 
@@ -22,7 +77,23 @@ pub fn rip_bytes(path: &str) -> anyhow::Result<Vec<u8>> {
     }
     println!("Bytes ripped succesfully");
     println!("Byte length: {}", byte_data.len());
-    return Ok(byte_data);
+    println!("Encrypting data...");
+
+    let mut rng = rand::thread_rng();
+    let bits = 2048;
+    let priv_key = RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key");
+    let pub_key = RsaPublicKey::from(&priv_key);
+
+
+    let _ = fs::write("private_key.pem", priv_key.to_pkcs1_pem(LineEnding::CRLF).expect("failed to write"));
+    
+    let slice_data = byte_data.as_slice();
+
+    let enc_data = encrypt_message_in_chunks(slice_data, &pub_key);
+    
+    println!("Data encrypted successfully.");
+
+    return Ok(enc_data);
 }
 
 pub fn rip_binary(byte_data: Vec<u8>) -> anyhow::Result<Vec<bool>> {
@@ -594,7 +665,22 @@ pub fn read(path: &str, threads: usize) -> anyhow::Result<Vec<u8>> {
     }
 
     println!("Video read successfully");
-    return Ok(byte_data);
+
+
+    let private_key_pem = fs::read_to_string("private_key.pem").expect("failed to read private key file");
+    let private_key = RsaPrivateKey::from_pkcs1_pem(&private_key_pem).expect("failed to parse private key");
+
+    
+    let slice_data = byte_data.as_slice();
+
+
+    let dec_data = decrypt_message_in_chunks(slice_data, &private_key);
+
+    println!("decrypted data: {:?}", dec_data.len());
+
+    println!("Success decrypting data");
+
+    return Ok(dec_data);
 }
 
 //Uses literally all the RAM

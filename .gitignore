@@ -14,3 +14,5 @@
 /output.zip
 /output.png
 /cargo_home/**
+*.pem
+test.txt

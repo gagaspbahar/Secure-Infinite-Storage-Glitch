@@ -13,3 +13,5 @@ opencv = "0.75.0"
 tokio = {version = "1.24.2", features = ["full"]}
 youtube_dl = { version = "0.8.0", features = ["downloader"] }
 chrono = "0.4"
+rsa = "0.9.2"
+rand = "0.8.5"
