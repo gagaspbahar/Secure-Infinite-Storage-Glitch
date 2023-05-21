@@ -75,13 +75,48 @@ pub fn rip_bytes(path: &str) -> anyhow::Result<Vec<u8>> {
     println!("Byte length: {}", byte_data.len());
     println!("Encrypting data...");
 
-    let mut rng = rand::thread_rng();
-    let bits = 2048;
-    let priv_key = RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key");
-    let pub_key = RsaPublicKey::from(&priv_key);
+    // let mut rng = rand::thread_rng();
+    // let bits = 2048;
 
+    // check if private_key.pem exists
 
-    let _ = fs::write("private_key.pem", priv_key.to_pkcs1_pem(LineEnding::CRLF).expect("failed to write"));
+    let file_path = "path/to/file.txt";
+
+    let metadata_result = fs::metadata(file_path);
+
+    let mut is_priv_key_exists = false;
+
+    match metadata_result {
+        Ok(metadata) => {
+            // File exists
+            if metadata.is_file() {
+                println!("Key exists, using key..");
+                is_priv_key_exists = true;
+            } else {
+                println!("Key doesnt exist, generating key..");
+            }
+        }
+        Err(_) => {
+            // File does not exist or there was an error accessing it
+            println!("Key doesnt exist, generating key..");
+        }
+    }
+
+    let private_key: RsaPrivateKey;
+
+    if is_priv_key_exists {
+      let private_key_pem = fs::read_to_string("private_key.pem").expect("failed to read private key file");
+      private_key = RsaPrivateKey::from_pkcs1_pem(&private_key_pem).expect("failed to parse private key");
+    } else {
+      let mut rng = rand::thread_rng();
+      let bits = 2048;
+      private_key = RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key");
+      let _ = fs::write("private_key.pem", private_key.to_pkcs1_pem(LineEnding::CRLF).expect("failed to write"));
+      
+    }
+    
+    let pub_key = RsaPublicKey::from(&private_key);
+
     
     let slice_data = byte_data.as_slice();
 
